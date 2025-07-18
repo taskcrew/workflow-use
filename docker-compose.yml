@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:latest
+    container_name: workflow-use-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - workflow-net
+
+  backend:
+    build:
+      context: ./workflows
+      dockerfile: Dockerfile
+    container_name: workflow-use-backend
+    # Port is no longer exposed to the host
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DISPLAY=:99
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./workflows:/app
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    networks:
+      - workflow-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    container_name: workflow-use-frontend
+    # Port is no longer exposed to the host
+    environment:
+      # This URL is now configured for API requests via NGINX
+      - VITE_API_URL=/api
+    depends_on:
+      - backend
+    networks:
+      - workflow-net
+
+  extension:
+    build:
+      context: ./extension
+      dockerfile: Dockerfile
+    container_name: workflow-use-extension
+    networks:
+      - workflow-net
+
+networks:
+  workflow-net:
+    driver: bridge
+
+volumes:
+  workflow-data:
